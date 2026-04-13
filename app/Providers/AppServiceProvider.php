@@ -2,9 +2,10 @@
 
 namespace App\Providers;
 
-use App\Models\User; // Import ini
-use Illuminate\Support\Facades\Gate; // Import ini
 use Illuminate\Support\ServiceProvider;
+
+use Illuminate\Support\Facades\Gate;
+use App\Models\User;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,9 +22,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Tambahkan ini
         Gate::define('admin', function (User $user) {
             return $user->role === 'admin';
+        });
+
+        Gate::define('operator', function (User $user) {
+            return $user->role === 'operator';
         });
     }
 }

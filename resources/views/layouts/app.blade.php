@@ -4,18 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory Admin - @yield('title')</title>
-    <!-- Bootstrap 5 CSS -->
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Select2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+
     <style>
         :root {
             --primary-navy: #0A1930;
@@ -222,10 +220,12 @@
             border: 1px solid rgba(255,255,255,0.1) !important;
         }
     </style>
+    @stack('styles')
 </head>
 <body>
     <div class="ambient-glow"></div>
     <div class="ambient-glow-right"></div>
+
     @auth
     <div class="sidebar">
         <div class="sidebar-header">
@@ -241,6 +241,7 @@
             <a href="{{ route('items.index') }}" class="nav-item {{ request()->routeIs('items.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-box"></i> Items
             </a>
+
             @can('operator')
             <a href="{{ route('lendings.index') }}" class="nav-item {{ request()->routeIs('lendings.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-hand"></i> Lending
@@ -264,7 +265,7 @@
                 <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     <i class="fa-solid fa-user-circle"></i> {{ auth()->user()->name }}
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end">
+                <ul class="dropdown-menu dropdown-menu-end shadow">
                     <li><a class="dropdown-item" href="{{ route('profile') }}">Profile</a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
@@ -283,7 +284,6 @@
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -318,9 +318,7 @@
                 });
             @endif
 
-
-
-            // Global Delete Confirmation Helper
+            // Global Helpers
             window.confirmDelete = function(formId, message = 'You won\'t be able to revert this!') {
                 Swal.fire({
                     title: 'Are you sure?',
@@ -338,7 +336,6 @@
                 return false;
             };
 
-            // Global Generic Confirmation Helper
             window.confirmAction = function(formId, title, text, icon, confirmText) {
                 Swal.fire({
                     title: title,
@@ -358,5 +355,6 @@
         });
     </script>
     @yield('scripts')
+    @stack('scripts')
 </body>
 </html>
