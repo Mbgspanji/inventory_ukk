@@ -241,18 +241,16 @@
                 </div>
                 <form action="" method="POST" id="returnLendingForm">
                     @csrf
-                    <div class="modal-body">
-                        <div id="return-items-list">
+                    <div class="mb-3 mt-4">
+                        <label class="form-label fw-bold d-block">Tanda Tangan Penerima / Peminjam</label>
+                        <div style="border: 1px solid #ced4da; border-radius: 5px; background: #f8f9fa;">
+                            <canvas id="signature-pad-return" width="500" height="200"
+                                style="width: 100%; cursor: crosshair;"></canvas>
                         </div>
-
-                        <div class="mb-3 mt-3">
-                            <label class="form-label fw-bold">Damage Notes (General)</label>
-                            <textarea name="notes_damaged" class="form-control" rows="2" placeholder="Optional notes..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success" id="confirm-return-btn">Confirm Return</button>
+                        <input type="hidden" name="signature" id="signature-base64">
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="clear-signature">
+                            <i class="fa-solid fa-eraser"></i> Hapus Tanda Tangan
+                        </button>
                     </div>
                 </form>
             </div>
@@ -469,5 +467,41 @@
                 }
             });
         @endif
+
+        // Tambahkan di dalam $(document).ready(function() { ... })
+
+        let signaturePad;
+        const canvas = document.getElementById('signature-pad-return');
+
+        // Inisialisasi Signature Pad saat modal dibuka
+        $('#returnLendingModal').on('shown.bs.modal', function() {
+            // Sesuaikan ukuran canvas agar tidak distorsi
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+
+            signaturePad = new SignaturePad(canvas, {
+                backgroundColor: 'rgba(255, 255, 255, 0)',
+                penColor: 'rgb(0, 0, 0)'
+            });
+        });
+
+        // Tombol Hapus Tanda Tangan
+        $('#clear-signature').on('click', function() {
+            signaturePad.clear();
+        });
+
+        // Masukkan data base64 ke input hidden saat form disubmit
+        $('#returnLendingForm').submit(function(e) {
+            if (signaturePad.isEmpty()) {
+                alert("Silahkan isi tanda tangan terlebih dahulu untuk bukti pengembalian.");
+                e.preventDefault();
+                return false;
+            }
+
+            const dataUrl = signaturePad.toDataURL();
+            $('#signature-base64').val(dataUrl);
+        });
     </script>
 @endsection

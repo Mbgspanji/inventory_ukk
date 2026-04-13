@@ -18,6 +18,7 @@ class LendingController extends Controller
     {
         return Excel::download(new LendingsExport, 'lendings.xlsx');
     }
+
     public function index(Request $request)
     {
         $lendings = Lending::with(['user', 'details.item', 'editor'])
@@ -33,14 +34,9 @@ class LendingController extends Controller
                 });
             })
             ->latest('updated_at')->get();
+
         $items = Item::all();
         return view('lendings.index', compact('lendings', 'items'));
-    }
-
-    public function create()
-    {
-        $items = Item::where('available', '>', 0)->get();
-        return view('lendings.create', compact('items'));
     }
 
     public function store(Request $request)
@@ -68,7 +64,7 @@ class LendingController extends Controller
                 $item = Item::lockForUpdate()->find($item_id);
 
                 if ($item->available < $total) {
-                    throw new \Exception("Stok {$item->name} tidak cukup. (Available: {$item->available})");
+                    throw new \Exception("Stok {$item->name} tidak cukup.");
                 }
 
                 LendingDetail::create([
@@ -93,15 +89,15 @@ class LendingController extends Controller
     public function returnItem(Request $request, Lending $lending)
     {
         if ($lending->returned_date) {
-            return back()->with('error', 'Already returned.');
+            return back()->with('error', 'Sudah dikembalikan sebelumnya.');
         }
 
-        // Validasi: returns adalah array, returns.*.good dan returns.*.damaged harus angka
         $request->validate([
             'returns' => 'required|array',
             'returns.*.good' => 'required|integer|min:0',
             'returns.*.damaged' => 'required|integer|min:0',
-            'notes_damaged' => 'nullable|string'
+            'notes_damaged' => 'nullable|string',
+            'signature' => 'required' // Pastikan tanda tangan dikirim dari modal
         ]);
 
         try {
@@ -111,50 +107,38 @@ class LendingController extends Controller
 
             foreach ($lending->details as $detail) {
                 $itemId = $detail->item_id;
-
-                // Ambil input berdasarkan ID item
                 $inputGood = $request->returns[$itemId]['good'] ?? 0;
                 $inputDamaged = $request->returns[$itemId]['damaged'] ?? 0;
 
-                // Validasi: Total kembali (baik + rusak) harus sama dengan yang dipinjam untuk item tersebut
                 if (($inputGood + $inputDamaged) != $detail->total) {
-                    $itemName = $detail->item->name ?? 'Unknown Item';
-                    throw new \Exception("Jumlah kembali untuk {$itemName} ({$inputGood} baik, {$inputDamaged} rusak) tidak sesuai dengan total pinjam ({$detail->total}).");
+                    $itemName = $detail->item->name ?? 'Item';
+                    throw new \Exception("Total kembali {$itemName} tidak sesuai.");
                 }
 
                 $item = Item::lockForUpdate()->find($itemId);
-
-                // 1. Kurangi total yang sedang dipinjam
                 $item->lending_total -= $detail->total;
-
-                // 2. Tambahkan ke stok 'available' HANYA barang yang kondisinya baik
-                $item->available += $inputGood;
-
-                // 3. (Opsional) Jika ada kolom damaged di tabel items, tambahkan di sini
-                // $item->damaged_total += $inputDamaged; 
-
+                $item->available += $inputGood; // Hanya kondisi baik yang masuk stok siap pakai
                 $item->save();
 
-                // Simpan detail return ke database (jika Anda memiliki tabel detail_returns)
-                // Atau kita hitung total rusak untuk catatan di tabel lendings
                 $summaryDamaged += $inputDamaged;
             }
 
-            // Update status data peminjaman
-            $lending->returned_date = now();
-            $lending->edited_by = Auth::id();
-
-            // Update keterangan dengan rincian kerusakan
+            // Update status dan simpan signature pengembalian
             $catatanLama = $lending->keterangan ? $lending->keterangan . " | " : "";
-            $lending->keterangan = $catatanLama . "Pengembalian Selesai. Total Rusak/Hilang: " . $summaryDamaged . ". Ket: " . $request->notes_damaged;
-
-            $lending->save();
+            
+            $lending->update([
+                'returned_date' => now(),
+                'edited_by' => Auth::id(), // Pastikan kolom ini sesuai di DB (editor_id atau edited_by)
+                'signature_return' => $request->signature,
+                'keterangan' => $catatanLama . "Total Rusak: " . $summaryDamaged . ". Ket: " . $request->notes_damaged
+            ]);
 
             DB::commit();
-            return back()->with('success', 'Semua barang berhasil diproses kembali.');
+            // Berikan session untuk trigger cetak struk otomatis di view
+            return back()->with('success', 'Barang berhasil dikembalikan.')->with('print_receipt', $lending->id);
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Gagal mengembalikan: ' . $e->getMessage());
+            return back()->with('error', 'Gagal: ' . $e->getMessage());
         }
     }
 
@@ -164,7 +148,6 @@ class LendingController extends Controller
             DB::beginTransaction();
 
             if (is_null($lending->returned_date)) {
-                // if deleted before returned, we must restore the stock
                 foreach ($lending->details as $detail) {
                     $item = Item::lockForUpdate()->find($detail->item_id);
                     $item->lending_total -= $detail->total;
@@ -175,20 +158,33 @@ class LendingController extends Controller
 
             $lending->delete();
             DB::commit();
-            return back()->with('success', 'Catatan peminjaman dihapus.');
+            return back()->with('success', 'Catatan dihapus.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Gagal menghapus: ' . $e->getMessage());
+            return back()->with('error', 'Gagal: ' . $e->getMessage());
         }
     }
 
-
     public function downloadReceipt(Lending $lending)
     {
-        // Hapus validasi if(!$lending->returned_date) agar struk bisa dicetak kapan saja
         $lending->load(['user', 'details.item', 'editor']);
         $pdf = Pdf::loadView('lendings.receipt', compact('lending'));
-        $pdf->setPaper([0, 0, 226.77, 500], 'portrait');
+        
+        // Ukuran struk thermal (80mm x 210mm)
+        $pdf->setPaper([0, 0, 226.77, 600], 'portrait');
         return $pdf->stream('receipt-' . $lending->id . '.pdf');
+    }
+
+    public function storeSignature(Request $request, $id)
+    {
+        $request->validate([
+            'signature' => 'required'
+        ]);
+
+        $lending = Lending::findOrFail($id);
+        $lending->signature_borrower = $request->signature;
+        $lending->save();
+
+        return redirect()->route('lendings.index')->with('success', 'Tanda tangan peminjam disimpan.');
     }
 }

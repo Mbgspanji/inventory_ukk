@@ -121,9 +121,21 @@
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
                     <div class="card-header py-3 d-flex justify-content-between align-items-center bg-white">
-                        <h5 class="mb-0 fw-bold">Monitoring Peminjaman (Bulan Ini)</h5>
-                        <span class="badge bg-primary">{{ now()->format('F Y') }}</span>
+                        <h5 class="mb-0 fw-bold">Monitoring Peminjaman</h5>
+
+                        <div class="btn-group" role="group">
+                            <a href="{{ route('dashboard', ['filter' => 'day']) }}"
+                                class="btn btn-sm {{ $filter == 'day' ? 'btn-primary' : 'btn-outline-primary' }}">Hari
+                                Ini</a>
+                            <a href="{{ route('dashboard', ['filter' => 'week']) }}"
+                                class="btn btn-sm {{ $filter == 'week' ? 'btn-primary' : 'btn-outline-primary' }}">Minggu
+                                Ini</a>
+                            <a href="{{ route('dashboard', ['filter' => 'month']) }}"
+                                class="btn btn-sm {{ $filter == 'month' ? 'btn-primary' : 'btn-outline-primary' }}">Bulan
+                                Ini</a>
+                        </div>
                     </div>
+
                     <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover align-middle mb-0">
@@ -158,9 +170,6 @@
                                                         class="badge rounded-pill bg-success-subtle text-success border border-success">
                                                         <i class="fa-solid fa-circle-check"></i> Sudah Kembali
                                                     </span>
-                                                    <div class="small text-muted mt-1">
-                                                        {{ \Carbon\Carbon::parse($lending->returned_date)->format('d/m/y') }}
-                                                    </div>
                                                 @else
                                                     <span
                                                         class="badge rounded-pill bg-warning-subtle text-warning border border-warning">
@@ -170,18 +179,17 @@
                                             </td>
                                             <td class="text-center">
                                                 <a href="{{ route('lendings.index', ['borrower_name' => $lending->borrower_name]) }}"
-                                                    class="btn btn-sm btn-light border">
-                                                    Detail
-                                                </a>
+                                                    class="btn btn-sm btn-light border">Detail</a>
                                             </td>
                                         </tr>
                                     @endforeach
                                     @if ($recentLendings->isEmpty())
                                         <tr>
-                                            <td colspan="5" class="text-center py-4 text-muted">Tidak ada transaksi bulan
-                                                ini.</td>
+                                            <td colspan="5" class="text-center py-4 text-muted">
+                                                Tidak ada transaksi untuk periode ini.
+                                            </td>
                                         </tr>
-                                    @endif  
+                                    @endif
                                 </tbody>
                             </table>
                         </div>
