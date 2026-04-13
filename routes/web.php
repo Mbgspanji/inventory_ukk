@@ -29,7 +29,7 @@ Route::middleware('auth')->group(function () {
     Route::get('items/{item}/history', [ItemController::class, 'history'])->name('items.history');
     
     Route::get('lendings/export', [LendingController::class, 'export'])->name('lendings.export');
-    Route::resource('lendings', LendingController::class);
+    Route::resource('lendings-add', LendingController::class);
     Route::post('lendings/{lending}/return', [LendingController::class, 'returnItem'])->name('lendings.return');
     
     Route::middleware('can:admin')->group(function () {
