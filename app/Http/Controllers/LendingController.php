@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\Lending;
@@ -8,23 +9,26 @@ use App\Exports\LendingsExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
 
 class LendingController extends Controller
 {
-    public function export() {
+    public function export()
+    {
         return Excel::download(new LendingsExport, 'lendings.xlsx');
     }
-    public function index(Request $request) {
+    public function index(Request $request)
+    {
         $lendings = Lending::with(['user', 'details.item', 'editor'])
-            ->when($request->borrower_name, function($query, $name) {
+            ->when($request->borrower_name, function ($query, $name) {
                 return $query->where('borrower_name', 'like', "%{$name}%");
             })
-            ->when($request->date, function($query, $date) {
+            ->when($request->date, function ($query, $date) {
                 return $query->whereDate('date', $date);
             })
-            ->when($request->item_id, function($query, $item_id) {
-                return $query->whereHas('details', function($q) use ($item_id) {
+            ->when($request->item_id, function ($query, $item_id) {
+                return $query->whereHas('details', function ($q) use ($item_id) {
                     $q->where('item_id', $item_id);
                 });
             })
@@ -33,12 +37,14 @@ class LendingController extends Controller
         return view('lendings.index', compact('lendings', 'items'));
     }
 
-    public function create() {
+    public function create()
+    {
         $items = Item::where('available', '>', 0)->get();
         return view('lendings.create', compact('items'));
     }
 
-    public function store(Request $request) {
+    public function store(Request $request)
+    {
         $request->validate([
             'borrower_name' => 'required',
             'items' => 'required|array',
@@ -78,42 +84,82 @@ class LendingController extends Controller
 
             DB::commit();
             return redirect()->route('lendings.index')->with('success', 'Peminjaman berhasil dicatat.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', $e->getMessage())->withInput();
         }
     }
 
-    public function returnItem(Lending $lending) {
+    public function returnItem(Request $request, Lending $lending)
+    {
         if ($lending->returned_date) {
             return back()->with('error', 'Already returned.');
         }
 
+        // Validasi: returns adalah array, returns.*.good dan returns.*.damaged harus angka
+        $request->validate([
+            'returns' => 'required|array',
+            'returns.*.good' => 'required|integer|min:0',
+            'returns.*.damaged' => 'required|integer|min:0',
+            'notes_damaged' => 'nullable|string'
+        ]);
+
         try {
             DB::beginTransaction();
 
+            $summaryDamaged = 0;
+
             foreach ($lending->details as $detail) {
-                $item = Item::lockForUpdate()->find($detail->item_id);
+                $itemId = $detail->item_id;
+
+                // Ambil input berdasarkan ID item
+                $inputGood = $request->returns[$itemId]['good'] ?? 0;
+                $inputDamaged = $request->returns[$itemId]['damaged'] ?? 0;
+
+                // Validasi: Total kembali (baik + rusak) harus sama dengan yang dipinjam untuk item tersebut
+                if (($inputGood + $inputDamaged) != $detail->total) {
+                    $itemName = $detail->item->name ?? 'Unknown Item';
+                    throw new \Exception("Jumlah kembali untuk {$itemName} ({$inputGood} baik, {$inputDamaged} rusak) tidak sesuai dengan total pinjam ({$detail->total}).");
+                }
+
+                $item = Item::lockForUpdate()->find($itemId);
+
+                // 1. Kurangi total yang sedang dipinjam
                 $item->lending_total -= $detail->total;
-                $item->available += $detail->total;
+
+                // 2. Tambahkan ke stok 'available' HANYA barang yang kondisinya baik
+                $item->available += $inputGood;
+
+                // 3. (Opsional) Jika ada kolom damaged di tabel items, tambahkan di sini
+                // $item->damaged_total += $inputDamaged; 
+
                 $item->save();
+
+                // Simpan detail return ke database (jika Anda memiliki tabel detail_returns)
+                // Atau kita hitung total rusak untuk catatan di tabel lendings
+                $summaryDamaged += $inputDamaged;
             }
 
+            // Update status data peminjaman
             $lending->returned_date = now();
             $lending->edited_by = Auth::id();
+
+            // Update keterangan dengan rincian kerusakan
+            $catatanLama = $lending->keterangan ? $lending->keterangan . " | " : "";
+            $lending->keterangan = $catatanLama . "Pengembalian Selesai. Total Rusak/Hilang: " . $summaryDamaged . ". Ket: " . $request->notes_damaged;
+
             $lending->save();
 
             DB::commit();
-            return back()->with('success', 'Barang berhasil dikembalikan.');
-
+            return back()->with('success', 'Semua barang berhasil diproses kembali.');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Gagal mengembalikan: ' . $e->getMessage());
         }
     }
 
-    public function destroy(Lending $lending) {
+    public function destroy(Lending $lending)
+    {
         try {
             DB::beginTransaction();
 
@@ -130,10 +176,19 @@ class LendingController extends Controller
             $lending->delete();
             DB::commit();
             return back()->with('success', 'Catatan peminjaman dihapus.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Gagal menghapus: ' . $e->getMessage());
         }
+    }
+
+
+    public function downloadReceipt(Lending $lending)
+    {
+        // Hapus validasi if(!$lending->returned_date) agar struk bisa dicetak kapan saja
+        $lending->load(['user', 'details.item', 'editor']);
+        $pdf = Pdf::loadView('lendings.receipt', compact('lending'));
+        $pdf->setPaper([0, 0, 226.77, 500], 'portrait');
+        return $pdf->stream('receipt-' . $lending->id . '.pdf');
     }
 }

@@ -39,4 +39,7 @@ Route::middleware('auth')->group(function () {
     
     Route::get('/profile', [ProfileController::class, 'index'])->name('profile');
     Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
+
+    Route::get('/lendings/{lending}/receipt', [LendingController::class, 'downloadReceipt'])->name('lendings.receipt');
+    
 });

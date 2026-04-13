@@ -9,16 +9,23 @@ use App\Models\User;
 class DashboardController extends Controller
 {
     public function index() {
-        $stats = [
-            'categories' => Category::count(),
-            'items' => Item::sum('total'),
-            'lendings' => Lending::whereNull('returned_date')->count(),
-            'users' => User::count(),
-        ];
+    $stats = [
+        'categories' => Category::count(),
+        'items' => Item::sum('total'),
+        'lendings' => Lending::whereNull('returned_date')->count(),
+        'users' => User::count(),
+    ];
 
-        $allItems = Item::with('category')->latest()->take(10)->get();
-        $repairItems = Item::where('repair', '>', 0)->with('category')->get();
+    $allItems = Item::with('category')->latest()->take(10)->get();
+    $repairItems = Item::where('repair', '>', 0)->with('category')->get();
 
-        return view('dashboard.index', compact('stats', 'allItems', 'repairItems'));
-    }
+    // Data Tambahan: Peminjaman Hari Ini & Status Pengembalian
+    $recentLendings = Lending::with(['details.item', 'user'])
+        ->whereMonth('date', now()->month) // Bisa diganti ->whereDate('date', now()) untuk harian
+        ->latest()
+        ->take(10)
+        ->get();
+
+    return view('dashboard.index', compact('stats', 'allItems', 'repairItems', 'recentLendings'));
+}
 }
